@@ -1,0 +1,230 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  name                String
+  testIdentityNumber  String               @unique
+  mobileNumber        String               @unique
+  password            String
+  role                String               @default("CITIZEN") // "CITIZEN" | "RESCUER"
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  households          Household[]
+  notifications       Notification[]
+  rescueAssignments   RescueAssignment[]
+  createdDisasters    DisasterEvent[]
+}
+
+model Household {
+  id             String            @id @default(uuid())
+  name           String            // e.g. "Building A-182, Flat 401"
+  address        String
+  city           String
+  state          String
+  latitude       Float
+  longitude      Float
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  members        HouseholdMember[]
+
+  @@index([userId])
+}
+
+model HouseholdMember {
+  id             String            @id @default(uuid())
+  householdId    String
+  household      Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name           String
+  age            Int
+  relationship   String            // "Self", "Spouse", "Child", "Parent", "Other"
+  category       String            // "ADULT" | "CHILD" | "ELDERLY"
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  expectedLocations ExpectedLocation[]
+  emergencyStatuses EmergencyStatus[]
+  emergencyRequests EmergencyRequest[]
+
+  @@index([householdId])
+}
+
+model DisasterEvent {
+  id                 String              @id @default(uuid())
+  type               String              // "FLOOD" | "CYCLONE" | "EARTHQUAKE" | "LANDSLIDE" | "OTHER"
+  title              String
+  description        String
+  alertLevel         String              // "GREEN" | "YELLOW" | "ORANGE" | "RED"
+  predictedStartTime DateTime
+  predictedEndTime   DateTime
+  status             String              // "PREDICTED" | "ACTIVE" | "ENDED" | "CANCELLED"
+  createdById        String?
+  createdBy          User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  affectedZones      AffectedZone[]
+  expectedLocations  ExpectedLocation[]
+  emergencyStatuses  EmergencyStatus[]
+  emergencyRequests  EmergencyRequest[]
+  notifications      Notification[]
+}
+
+model AffectedZone {
+  id             String         @id @default(uuid())
+  disasterId     String
+  disaster       DisasterEvent  @relation(fields: [disasterId], references: [id], onDelete: Cascade)
+  name           String
+  riskLevel      String         // "LOW" | "MEDIUM" | "HIGH" | "EXTREME"
+  polygonGeoJson String         // JSON array of [lat, lng] points defining boundary polygon
+  radiusKm       Float          @default(5.0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([disasterId])
+}
+
+model ExpectedLocation {
+  id                 String          @id @default(uuid())
+  disasterId         String
+  disaster           DisasterEvent   @relation(fields: [disasterId], references: [id], onDelete: Cascade)
+  householdMemberId  String
+  householdMember    HouseholdMember @relation(fields: [householdMemberId], references: [id], onDelete: Cascade)
+  expectedType       String          // "HOME" | "SHELTER" | "OTHER_CITY" | "UNKNOWN"
+  shelterId          String?
+  shelter            Shelter?        @relation(fields: [shelterId], references: [id], onDelete: SetNull)
+  otherCity          String?
+  reconfirmedStatus  String?         // "SAME_PLAN" | "CHANGE_LOCATION" | "NOT_SURE"
+  reconfirmedAt      DateTime?
+  submittedTime      DateTime        @default(now())
+  updatedTime        DateTime        @updatedAt
+
+  @@unique([disasterId, householdMemberId])
+  @@index([disasterId])
+  @@index([shelterId])
+}
+
+model Shelter {
+  id             String             @id @default(uuid())
+  name           String
+  address        String
+  latitude       Float
+  longitude      Float
+  capacity       Int
+  contactNumber  String
+  status         String             @default("ACTIVE") // "ACTIVE" | "NEAR_CAPACITY" | "FULL" | "CLOSED"
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  expectedLocations ExpectedLocation[]
+}
+
+model EmergencyFacility {
+  id             String    @id @default(uuid())
+  name           String
+  type           String    // "HOSPITAL" | "FIRE_STATION" | "POLICE_STATION" | "CHECKPOINT"
+  address        String
+  latitude       Float
+  longitude      Float
+  contactNumber  String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Notification {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  disasterId  String?
+  disaster    DisasterEvent? @relation(fields: [disasterId], references: [id], onDelete: SetNull)
+  type        String         // "DISASTER_ALERT" | "EXPECTED_LOCATION_REQUEST" | "RECONFIRMATION" | "SHELTER_UPDATE"
+  message     String
+  status      String         @default("UNREAD") // "UNREAD" | "READ"
+  createdAt   DateTime       @default(now())
+  readAt      DateTime?
+
+  @@index([userId])
+}
+
+model EmergencyStatus {
+  id                 String          @id @default(uuid())
+  disasterId         String
+  disaster           DisasterEvent   @relation(fields: [disasterId], references: [id], onDelete: Cascade)
+  householdMemberId  String
+  householdMember    HouseholdMember @relation(fields: [householdMemberId], references: [id], onDelete: Cascade)
+  status             String          // "SAFE" | "IN_DISTRESS" | "UNACCOUNTED"
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([disasterId, householdMemberId])
+  @@index([disasterId])
+}
+
+model EmergencyRequest {
+  id                 String               @id @default(uuid())
+  disasterId         String
+  disaster           DisasterEvent        @relation(fields: [disasterId], references: [id], onDelete: Cascade)
+  householdMemberId  String
+  householdMember    HouseholdMember      @relation(fields: [householdMemberId], references: [id], onDelete: Cascade)
+  latitude           Float?
+  longitude          Float?
+  address            String?
+  description        String?
+  priorityScore      Int                  @default(0)
+  rescueStatus       String               @default("PENDING") // "PENDING" | "TEAM_ASSIGNED" | "SAFELY_RESCUED" | "NOT_FOUND"
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  conditions         EmergencyCondition[]
+  rescueAssignments  RescueAssignment[]
+
+  @@index([disasterId])
+  @@index([householdMemberId])
+}
+
+model EmergencyCondition {
+  id                 String           @id @default(uuid())
+  emergencyRequestId String
+  emergencyRequest   EmergencyRequest @relation(fields: [emergencyRequestId], references: [id], onDelete: Cascade)
+  conditionType      String           // "TRAPPED" | "HEAVILY_INJURED" | "WATER_RISING" | "FIRE" | "PHYSICALLY_DISABLED" | "CHILDREN_INFANTS_PRESENT" | "SERIOUSLY_UNWELL" | "NEED_RESCUE" | "OTHER"
+
+  @@index([emergencyRequestId])
+}
+
+model RescueAssignment {
+  id                 String           @id @default(uuid())
+  emergencyRequestId String
+  emergencyRequest   EmergencyRequest @relation(fields: [emergencyRequestId], references: [id], onDelete: Cascade)
+  teamName           String
+  assignedByUserId   String?
+  assignedByUser     User?            @relation(fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  assignedAt         DateTime         @default(now())
+  status             String           @default("TEAM_ASSIGNED") // "TEAM_ASSIGNED" | "SAFELY_RESCUED" | "NOT_FOUND"
+  notes              String?
+  updatedAt          DateTime         @updatedAt
+
+  @@index([emergencyRequestId])
+}
+
+model PriorityConfiguration {
+  id            String   @id @default(uuid())
+  conditionType String   @unique
+  weight        Int
+  isActive      Boolean  @default(true)
+}
+
+model Road {
+  id              String   @id @default(uuid())
+  name            String
+  status          String   @default("OPEN") // "OPEN" | "FLOODED" | "BLOCKED" | "RESTRICTED"
+  coordinatesJson String   // JSON array of [lat, lng] points along the road
+}

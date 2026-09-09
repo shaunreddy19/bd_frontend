@@ -1,0 +1,6 @@
+{
+  "name": "STRIDE - Disaster Intelligence & Response",
+  "description": "Sensor Trend Intelligence for Detection & Evaluation: A comprehensive disaster intelligence, preparedness, and rescue management platform.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

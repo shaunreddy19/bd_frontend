@@ -1,0 +1,528 @@
+import React, { useState, useEffect } from 'react';
+import { householdService, Household, HouseholdMember } from '../../services/householdService.ts';
+import { disasterService, DisasterEvent } from '../../services/disasterService.ts';
+import { shelterService, Shelter } from '../../services/shelterService.ts';
+import { User } from '../../services/authService.ts';
+import {
+  Users,
+  UserPlus,
+  Home,
+  Tent,
+  MapPin,
+  HelpCircle,
+  Check,
+  Trash2,
+  Edit2,
+  Save,
+  X,
+  Loader2,
+  ShieldAlert,
+} from 'lucide-react';
+
+interface HouseholdMembersViewProps {
+  user: User;
+  activeDisaster: DisasterEvent | null;
+}
+
+export const HouseholdMembersView: React.FC<HouseholdMembersViewProps> = ({
+  user,
+  activeDisaster,
+}) => {
+  const [household, setHousehold] = useState<Household | null>(null);
+  const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [expectedLocationsMap, setExpectedLocationsMap] = useState<
+    Record<string, { type: 'HOME' | 'SHELTER' | 'OTHER_CITY' | 'UNKNOWN'; shelterId?: string; otherCity?: string }>
+  >({});
+  const [loading, setLoading] = useState(true);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Add Member Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberAge, setNewMemberAge] = useState<number | ''>('');
+  const [newMemberRel, setNewMemberRel] = useState('Spouse');
+  const [addLoading, setAddLoading] = useState(false);
+
+  useEffect(() => {
+    loadHouseholdAndPlans();
+  }, [activeDisaster?.id]);
+
+  const loadHouseholdAndPlans = async () => {
+    setLoading(true);
+    try {
+      const [hh, sList] = await Promise.all([
+        householdService.getMyHousehold().catch(() => null),
+        shelterService.getShelters().catch(() => []),
+      ]);
+
+      if (hh) {
+        setHousehold(hh);
+
+        // Pre-populate expected locations if disaster active
+        if (activeDisaster) {
+          const locs = await disasterService.getExpectedLocations(activeDisaster.id).catch(() => []);
+          const map: Record<string, any> = {};
+          locs.forEach((l: any) => {
+            map[l.householdMemberId] = {
+              type: l.expectedType,
+              shelterId: l.shelterId,
+              otherCity: l.otherCity,
+            };
+          });
+
+          // Fill defaults for members without record
+          hh.members.forEach((m) => {
+            if (!map[m.id]) {
+              map[m.id] = { type: 'HOME' };
+            }
+          });
+          setExpectedLocationsMap(map);
+        }
+      }
+      setShelters(sList);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLocationTypeChange = (
+    memberId: string,
+    type: 'HOME' | 'SHELTER' | 'OTHER_CITY' | 'UNKNOWN'
+  ) => {
+    setExpectedLocationsMap((prev) => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        type,
+        shelterId: type === 'SHELTER' ? prev[memberId]?.shelterId || shelters[0]?.id : undefined,
+        otherCity: type === 'OTHER_CITY' ? prev[memberId]?.otherCity || '' : undefined,
+      },
+    }));
+  };
+
+  const handleShelterSelect = (memberId: string, shelterId: string) => {
+    setExpectedLocationsMap((prev) => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        type: 'SHELTER',
+        shelterId,
+      },
+    }));
+  };
+
+  const handleOtherCityChange = (memberId: string, otherCity: string) => {
+    setExpectedLocationsMap((prev) => ({
+      ...prev,
+      [memberId]: {
+        ...prev[memberId],
+        type: 'OTHER_CITY',
+        otherCity,
+      },
+    }));
+  };
+
+  const handleSaveDisasterPlan = async () => {
+    if (!activeDisaster) return;
+    setSavingPlan(true);
+    setSaveSuccess(false);
+    try {
+      const payload = Object.entries(expectedLocationsMap).map(([memberId, data]: [string, any]) => ({
+        memberId,
+        expectedType: data.type,
+        shelterId: data.type === 'SHELTER' ? data.shelterId : null,
+        otherCity: data.type === 'OTHER_CITY' ? data.otherCity : null,
+      }));
+
+      await disasterService.setExpectedLocations(activeDisaster.id, payload);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      alert('Failed to save disaster plans: ' + err.message);
+    } finally {
+      setSavingPlan(false);
+    }
+  };
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!household || !newMemberName.trim() || newMemberAge === '') return;
+    setAddLoading(true);
+    try {
+      const ageNum = Number(newMemberAge);
+      const newMember = await householdService.addMember(household.id, {
+        name: newMemberName.trim(),
+        age: ageNum,
+        relationship: newMemberRel,
+      });
+
+      setHousehold((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: [...prev.members, newMember],
+            }
+          : prev
+      );
+
+      setExpectedLocationsMap((prev) => ({
+        ...prev,
+        [newMember.id]: { type: 'HOME' },
+      }));
+
+      setShowAddModal(false);
+      setNewMemberName('');
+      setNewMemberAge('');
+      setNewMemberRel('Spouse');
+    } catch (err: any) {
+      alert(err.message || 'Failed to add member.');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleDeleteMember = async (memberId: string) => {
+    if (!household) return;
+    if (!confirm('Are you sure you want to remove this household member?')) return;
+
+    try {
+      await householdService.deleteMember(household.id, memberId);
+      setHousehold((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: prev.members.filter((m) => m.id !== memberId),
+            }
+          : prev
+      );
+
+      setExpectedLocationsMap((prev) => {
+        const next = { ...prev };
+        delete next[memberId];
+        return next;
+      });
+    } catch (err: any) {
+      alert('Failed to delete member: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk',sans-serif] text-[#2F4156] tracking-tight">
+            Household Members & Disaster Plans
+          </h1>
+          <p className="text-sm font-medium text-[#567C8D] mt-1">
+            Registered address: {household?.address || 'Your Registered Home'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-white border border-[#C8D9E6] hover:bg-[#F5EFEB] text-xs font-bold text-[#2F4156] transition flex items-center gap-2 shadow-sm"
+          >
+            <UserPlus className="w-4 h-4 text-[#567C8D]" />
+            <span>Add Member</span>
+          </button>
+
+          {activeDisaster && (
+            <button
+              type="button"
+              onClick={handleSaveDisasterPlan}
+              disabled={savingPlan}
+              className="px-5 py-2.5 rounded-xl bg-[#2F4156] hover:bg-[#1F2D3D] text-white text-xs font-bold transition flex items-center gap-2 shadow-md disabled:opacity-50"
+            >
+              {savingPlan ? (
+                <Loader2 className="w-4 h-4 animate-spin text-[#C8D9E6]" />
+              ) : saveSuccess ? (
+                <Check className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Save className="w-4 h-4 text-[#C8D9E6]" />
+              )}
+              <span>{saveSuccess ? 'Plans Saved!' : 'Save Plans to STRIDE'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {saveSuccess && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2 animate-fadeIn">
+          <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span>
+            Expected location plans synchronized successfully with municipal disaster coordination system.
+          </span>
+        </div>
+      )}
+
+      {/* Household Members Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {household?.members?.map((member) => {
+          const plan = expectedLocationsMap[member.id] || { type: 'HOME' };
+
+          return (
+            <div
+              key={member.id}
+              className="bg-white rounded-3xl p-6 border border-[#C8D9E6]/70 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+            >
+              {/* Member Profile Header */}
+              <div>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-[#C8D9E6]/30 flex items-center justify-center font-bold text-[#2F4156] text-base">
+                      {member.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-[#2F4156]">{member.name}</h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-[#567C8D]">{member.relationship}</span>
+                        <span className="text-[10px] text-[#567C8D]">•</span>
+                        <span className="text-xs text-[#567C8D]">{member.age} yrs</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                        member.category === 'CHILD'
+                          ? 'bg-amber-100 text-amber-800'
+                          : member.category === 'ELDERLY'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-[#567C8D]/15 text-[#2F4156]'
+                      }`}
+                    >
+                      {member.category}
+                    </span>
+                    {member.relationship !== 'Self' && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMember(member.id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                        title="Remove member"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4 Disaster Location Choices */}
+                <div className="mt-6">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#567C8D] mb-2.5">
+                    Expected Disaster Location Plan
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Option 1: Registered Home */}
+                    <button
+                      type="button"
+                      onClick={() => handleLocationTypeChange(member.id, 'HOME')}
+                      className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
+                        plan.type === 'HOME'
+                          ? 'bg-[#2F4156] text-white border-[#2F4156] shadow-sm'
+                          : 'bg-[#F5EFEB]/70 text-[#2F4156] border-[#C8D9E6]/70 hover:bg-[#F5EFEB]'
+                      }`}
+                    >
+                      <Home
+                        className={`w-4 h-4 ${plan.type === 'HOME' ? 'text-[#C8D9E6]' : 'text-[#567C8D]'}`}
+                      />
+                      <span className="text-xs font-bold">My Home</span>
+                    </button>
+
+                    {/* Option 2: Designated Shelter */}
+                    <button
+                      type="button"
+                      onClick={() => handleLocationTypeChange(member.id, 'SHELTER')}
+                      className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
+                        plan.type === 'SHELTER'
+                          ? 'bg-[#059669] text-white border-[#059669] shadow-sm'
+                          : 'bg-[#F5EFEB]/70 text-[#2F4156] border-[#C8D9E6]/70 hover:bg-[#F5EFEB]'
+                      }`}
+                    >
+                      <Tent
+                        className={`w-4 h-4 ${plan.type === 'SHELTER' ? 'text-white' : 'text-[#059669]'}`}
+                      />
+                      <span className="text-xs font-bold">Safe Shelter</span>
+                    </button>
+
+                    {/* Option 3: Another Location */}
+                    <button
+                      type="button"
+                      onClick={() => handleLocationTypeChange(member.id, 'OTHER_CITY')}
+                      className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
+                        plan.type === 'OTHER_CITY'
+                          ? 'bg-[#567C8D] text-white border-[#567C8D] shadow-sm'
+                          : 'bg-[#F5EFEB]/70 text-[#2F4156] border-[#C8D9E6]/70 hover:bg-[#F5EFEB]'
+                      }`}
+                    >
+                      <MapPin
+                        className={`w-4 h-4 ${plan.type === 'OTHER_CITY' ? 'text-white' : 'text-[#567C8D]'}`}
+                      />
+                      <span className="text-xs font-bold">Other City</span>
+                    </button>
+
+                    {/* Option 4: I Don't Know Yet */}
+                    <button
+                      type="button"
+                      onClick={() => handleLocationTypeChange(member.id, 'UNKNOWN')}
+                      className={`p-3 rounded-2xl border text-left transition flex items-center gap-2.5 ${
+                        plan.type === 'UNKNOWN'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                          : 'bg-[#F5EFEB]/70 text-[#2F4156] border-[#C8D9E6]/70 hover:bg-[#F5EFEB]'
+                      }`}
+                    >
+                      <HelpCircle
+                        className={`w-4 h-4 ${plan.type === 'UNKNOWN' ? 'text-white' : 'text-amber-600'}`}
+                      />
+                      <span className="text-xs font-bold">Not Sure</span>
+                    </button>
+                  </div>
+
+                  {/* Sub-inputs when Shelter or Other City is chosen */}
+                  {plan.type === 'SHELTER' && (
+                    <div className="mt-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+                      <label className="block text-[11px] font-bold text-emerald-900 mb-1">
+                        Select Designated Shelter:
+                      </label>
+                      <select
+                        value={plan.shelterId || ''}
+                        onChange={(e) => handleShelterSelect(member.id, e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-emerald-300 text-xs font-semibold text-[#2F4156] outline-none"
+                      >
+                        {shelters.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} (Cap: {s.capacity})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {plan.type === 'OTHER_CITY' && (
+                    <div className="mt-3 p-3 rounded-2xl bg-blue-50 border border-blue-200">
+                      <label className="block text-[11px] font-bold text-[#2F4156] mb-1">
+                        Destination City / Relative Address:
+                      </label>
+                      <input
+                        type="text"
+                        value={plan.otherCity || ''}
+                        onChange={(e) => handleOtherCityChange(member.id, e.target.value)}
+                        placeholder="e.g. Bangalore, Relative's Residence"
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-blue-300 text-xs font-medium text-[#2F4156] outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status footnote */}
+              <div className="mt-6 pt-3 border-t border-[#F5EFEB] flex items-center justify-between text-[11px] text-[#567C8D]">
+                <span>Status: Configured for {activeDisaster?.title || 'Active Scenario'}</span>
+                <span className="font-bold text-[#2F4156]">
+                  {plan.type.replace('_', ' ')}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add Member Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#C8D9E6] shadow-2xl animate-scaleUp">
+            <div className="flex items-center justify-between pb-4 border-b border-[#F5EFEB]">
+              <h3 className="text-lg font-bold font-['Space_Grotesk',sans-serif] text-[#2F4156]">
+                Add Household Member
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg text-[#567C8D] hover:text-[#2F4156]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMember} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#2F4156] mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  placeholder="e.g. Priya Kumar"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#C8D9E6] text-xs font-medium text-[#2F4156] outline-none focus:border-[#567C8D]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#2F4156] mb-1">Age</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="120"
+                    value={newMemberAge}
+                    onChange={(e) => setNewMemberAge(e.target.value ? parseInt(e.target.value, 10) : '')}
+                    placeholder="e.g. 34"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#C8D9E6] text-xs font-medium text-[#2F4156] outline-none focus:border-[#567C8D]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#2F4156] mb-1">
+                    Relationship
+                  </label>
+                  <select
+                    value={newMemberRel}
+                    onChange={(e) => setNewMemberRel(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#C8D9E6] text-xs font-medium text-[#2F4156] outline-none focus:border-[#567C8D]"
+                  >
+                    <option value="Spouse">Spouse</option>
+                    <option value="Child">Child</option>
+                    <option value="Parent">Parent</option>
+                    <option value="Sibling">Sibling</option>
+                    <option value="Relative">Relative</option>
+                    <option value="Roommate">Roommate</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#F5EFEB] text-[11px] text-[#567C8D]">
+                Category will be calculated automatically: Age &lt;18 (Child), 18-64 (Adult), 65+ (Elderly).
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#567C8D] hover:text-[#2F4156]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addLoading}
+                  className="px-5 py-2.5 rounded-xl bg-[#2F4156] hover:bg-[#1F2D3D] text-white text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  {addLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Member</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

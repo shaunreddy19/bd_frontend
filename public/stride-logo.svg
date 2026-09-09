@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="stride-teal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#567C8D" />
+      <stop offset="100%" stop-color="#3A5968" />
+    </linearGradient>
+    <linearGradient id="stride-navy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2F4156" />
+      <stop offset="100%" stop-color="#1B2836" />
+    </linearGradient>
+    <linearGradient id="stride-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C8D9E6" />
+      <stop offset="100%" stop-color="#567C8D" />
+    </linearGradient>
+  </defs>
+
+  <!-- Top-right Sensor Waves -->
+  <path d="M 310 130 A 40 40 0 0 1 340 160" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.85" />
+  <path d="M 315 105 A 70 70 0 0 1 370 160" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.75" />
+  <path d="M 320 80 A 100 100 0 0 1 400 160" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.6" />
+
+  <!-- Bottom-left Sensor Waves -->
+  <path d="M 190 290 A 40 40 0 0 1 160 260" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.85" />
+  <path d="M 185 315 A 70 70 0 0 1 130 260" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.75" />
+  <path d="M 180 340 A 100 100 0 0 1 100 260" fill="none" stroke="#567C8D" stroke-width="9" stroke-linecap="round" opacity="0.6" />
+
+  <!-- The stylized S ribbons -->
+  <!-- Upper loop of S -->
+  <path d="M 320 185 C 310 140, 260 120, 205 135 C 160 148, 145 185, 155 225 C 165 260, 200 270, 245 285 C 315 305, 335 345, 320 395 C 305 440, 240 460, 185 435 C 150 420, 135 390, 140 360" fill="none" stroke="url(#stride-navy)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Overlay Fold / Dynamic Shading on S -->
+  <path d="M 160 215 C 175 160, 230 135, 290 150 C 315 158, 320 175, 310 200 C 295 230, 240 245, 195 265 C 165 280, 155 310, 160 345" fill="none" stroke="url(#stride-teal)" stroke-width="26" stroke-linecap="round" opacity="0.9" />
+
+  <!-- Center Trend Line Graph -->
+  <g id="trend-line">
+    <line x1="205" y1="235" x2="245" y2="210" stroke="#2F4156" stroke-width="6" stroke-linecap="round" />
+    <line x1="245" y1="210" x2="275" y2="225" stroke="#2F4156" stroke-width="6" stroke-linecap="round" />
+    <circle cx="205" cy="235" r="7" fill="#2F4156" />
+    <circle cx="245" cy="210" r="7" fill="#2F4156" />
+    <circle cx="275" cy="225" r="7" fill="#2F4156" />
+  </g>
+</svg>

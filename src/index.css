@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-stride-navy: #2F4156;
+  --color-stride-navy-dark: #1F2D3D;
+  --color-stride-teal: #567C8D;
+  --color-stride-teal-light: #7097A8;
+  --color-stride-sky: #C8D9E6;
+  --color-stride-sky-light: #E5EEF5;
+  --color-stride-beige: #F5EFEB;
+  --color-stride-beige-dark: #E8E0D7;
+  --color-stride-white: #FFFFFF;
+
+  --color-stride-red: #DC2626;
+  --color-stride-red-light: #FEE2E2;
+  --color-stride-green: #16A34A;
+  --color-stride-green-light: #DCFCE7;
+  --color-stride-yellow: #EAB308;
+  --color-stride-yellow-light: #FEF9C3;
+}
+
+/* Custom styling for Leaflet inside STRIDE */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  border-radius: 1rem;
+  z-index: 10;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #FFFFFF !important;
+  color: #2F4156 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(47, 65, 86, 0.15), 0 8px 10px -6px rgba(47, 65, 86, 0.1) !important;
+  padding: 4px;
+}
+
+.leaflet-popup-tip {
+  background: #FFFFFF !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F5EFEB;
+}
+::-webkit-scrollbar-thumb {
+  background: #567C8D;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2F4156;
+}
